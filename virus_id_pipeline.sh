@@ -26,13 +26,6 @@ done
 
 conda activate vs2
 
-#dsDNAphages and ssDNA only, which is the default
-
-for i in /gxfs_work1/geomar/smomw535/arctic_metag/all_data/all_data_fasta/splitfasta/*
-do
-sbatch --job-name=vs2 --cpus-per-task=30 --mem=4000 --time=48:00:00 --error=err --partition=cluster --wrap="virsorter run -w $i.out -i $i --min-length 1500 -j 4 all"
-done
-
 #to include all groups
 for i in /gxfs_work1/geomar/smomw535/arctic_metag/all_data/all_data_fasta/splitfasta/*.fa.*
 do
