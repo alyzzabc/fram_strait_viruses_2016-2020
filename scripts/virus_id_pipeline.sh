@@ -42,8 +42,8 @@ do
 	paste $i.vs2.out/final-viral-score.tsv $i.checkv.out/contamination.tsv | cut --complement -f13 > $i.vs2-checkv.tsv
 done
 
-#Run screening.py to assign confidence of viral contigs
-python screening.py
+#Run assign_viral_confidence.py to assign confidence of viral contigs
+python assign_viral_confidence.py
 
 #Extract sequences of Keep1 contigs, i.e. high confidence
 for i in `cat sample_names`
