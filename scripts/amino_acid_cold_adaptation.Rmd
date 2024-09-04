@@ -1,0 +1,550 @@
+# J. Muschiol
+# 03 September, 2024
+# This script is to analyze cold adaptation in viral proteins.
+# Required unput: viral proteins tab seperated (.tsv), metadata, abundance data
+---
+
+```{r}
+# Clear R's brain
+rm(list = ls())
+if(!is.null(dev.list())) dev.off() #clears all plots
+
+# make these packages and their associated functions
+# available to use in this script
+
+# core packages
+library(tidyverse)
+
+# others
+library(readxl)
+
+#protein sequence analysis
+library(Peptides) #only used to calculate pI
+
+#statistics
+library(vegan)
+
+my_colors <- c(
+  "dodgerblue2", "#E31A1C", # red
+  "black",
+  "#FF7F00", # orange
+  "green4",
+  "#6A3D9A", # purple
+  "gold1",
+  "skyblue2", "#FB9A99", # lt pink
+  "palegreen2",
+  "#CAB2D6", # lt purple
+  "#FDBF6F", # lt orange
+  "gray70", "khaki2",
+  "maroon", "orchid1", "deeppink1", "blue1", "steelblue4",
+  "darkturquoise", "green1", "yellow4", "yellow3",
+  "darkorange4", "brown"
+)
+```
+
+```{r}
+#import data:
+
+GOV_proteins <- read.csv("/path/to/your/file/GOV2_proteins.tsv", header=F, sep="\t", na.strings = "None") %>%
+  rename("sample_name"="V1",
+         "contig"="V2",
+         "full_ID" = "V3",
+         "start"="V4",
+         "end"="V5",
+         "strand"="V6",
+         "ID"="V7",
+         "partial"="V8",
+         "start_type"="V9",
+         "rbs_motif"="V10",
+         "rbs_spacer"="V11",
+         "gc_cont"="V12",
+         "sequence"="V13")
+GOV_proteins$sequence <- GOV_proteins$sequence %>% str_remove("\\*")
+GOV_proteins$full_ID <- as.character(GOV_proteins$full_ID)
+FS_proteins <- read.csv("/path/to/your/file/fram_strait_proteins.tsv", header=F, sep="\t", na.strings = "None") %>%
+  rename("sample_name"="V1",
+         "contig"="V2",
+         "full_ID" = "V3",
+         "start"="V4",
+         "end"="V5",
+         "strand"="V6",
+         "ID"="V7",
+         "partial"="V8",
+         "start_type"="V9",
+         "rbs_motif"="V10",
+         "rbs_spacer"="V11",
+         "gc_cont"="V12",
+         "sequence"="V13")
+FS_proteins$sequence <- FS_proteins$sequence %>% str_remove("\\*")
+FS_GOV_proteins <- full_join(FS_proteins,GOV_proteins)
+metadata <- read_excel("/path/to/your/file/gov2.0.and.fram.metadata.17may2024.xlsx", col_names=T, na=c("NA","","NaN")) %>% 
+  relocate(long, .after=lat) %>%
+  rename("sample_name" = "stationID",
+         "temp" = "temperature") %>%
+  filter(!is.na(temp))
+dates <- read.csv("/path/to/your/file/metadata.date.txt", header=T, sep="\t", na.strings = "") %>%
+  rename("sample_name" = "tara_header_pacbio_sample_ID") %>%
+  select(sample_name,date)
+dates$date <- as.Date(dates$date)
+
+abundances_CVPG <- read.csv("/path/to/your/file/fram.egc.wsc.merged_df.matrix_cvpg_tidy.csv", header=T, sep=";", na.strings = "", check.names = F) %>% select(-full_ID)
+```
+
+```{r}
+#count amino acids
+
+FS_GOV_proteins <- FS_GOV_proteins %>%
+  filter(!str_detect(sequence, "X")) %>%
+
+#count each amino acid in each sequence
+  mutate(A = (str_count(sequence, "A")),
+         C = (str_count(sequence, "C")),
+         D = (str_count(sequence, "D")),
+         E = (str_count(sequence, "E")),
+         "F" = (str_count(sequence, "F")),
+         G = (str_count(sequence, "G")),
+         H = (str_count(sequence, "H")),
+         I = (str_count(sequence, "I")),
+         K = (str_count(sequence, "K")),
+         L = (str_count(sequence, "L")),
+         M = (str_count(sequence, "M")),
+         N = (str_count(sequence, "N")),
+         P = (str_count(sequence, "P")),
+         Q = (str_count(sequence, "Q")),
+         R = (str_count(sequence, "R")),
+         S = (str_count(sequence, "S")),
+         "T" = (str_count(sequence, "T")),
+         V = (str_count(sequence, "V")),
+         W = (str_count(sequence, "W")),
+         Y = (str_count(sequence, "Y"))) %>%
+  mutate(acidic = (D+E)/nchar(sequence),
+
+#the following seven lines of code calculate the frequencies of the AAs in relation to protein length 
+         polar_uncharged = (S+T+N+Q)/nchar(sequence),
+         polar_charged = (R+H+K+D+E)/nchar(sequence),
+         aromaticity = (P+Y+W)/nchar(sequence),
+         proline = P/nchar(sequence),
+         glycine = G/nchar(sequence),
+         serine = S/nchar(sequence),
+         cysteine = C/nchar(sequence),
+
+#calculate R/K ratio
+         R_to_K = R/K,
+
+#calculation of Mw according to "Protein Identification and Analysis Tools on the Expasy Server",
+#Gasteiger, et al.; (In) John M. Walker (ed): The Proteomics Protocols Handbook, Humana Press (2005). pp. 571-607
+#the numbers are the average isotopic masses of amino acids found on
+#https://web.expasy.org/findmod/findmod_masses.html#AA
+         Mw = A*71.0788 + 
+              R*156.1875 +
+              N*114.1038 + 
+              D*115.0886 +
+              C*103.1388 +
+              E*129.1155 +
+              Q*128.1307 + 
+              G*57.0519 +
+              H*137.1411 +
+              I*113.1594 +
+              L*113.1594 +
+              K*128.1741 +
+              M*131.1926 +
+              F*147.1766 +
+              P*97.1167 +
+              S*87.0782 +
+              T*101.1051 +
+              W*186.2132 +
+              Y*163.1760 +
+              V*99.1326 + 
+              18.01524) %>%                   #for some reason the mass of one water is added ;-)
+  
+  mutate(R_to_K = case_when(is.nan(R_to_K) ~ 0,           #to get rid of NaN
+                           !is.nan(R_to_K) ~ R_to_K)) %>%
+  mutate(R_to_K = case_when(is.infinite(R_to_K) ~ R,           #to get rid of Inf
+                           !is.infinite(R_to_K) ~ R_to_K)) %>%
+  
+#the aliphatic index is calculated according to Ikai, A.J. (1980)
+#Thermostability and aliphatic index of globular proteins. J. Biochem. 88, 1895-1898.  
+  mutate(aliphatic_index = (A*71.0788*100)/Mw +
+                           ((V*99.1326*100)/Mw)*2.9 +                 
+                           ((I*113.1594+L*113.1594)*100/Mw)*3.9,
+
+#pI calculation using the EMBOSS scale
+         pI = pI(sequence, pKscale = "EMBOSS")) %>%
+
+#parameter based on idea by David Needham used to describe the nitrogen usage per protein  
+  mutate(nitrogen_usage = (R*4 +
+                          H*3 +                   
+                          (K+N+Q+W)*2 +
+                          D+E+S+T+G+P+C+A+V+I+L+M+F+Y)/nchar(sequence))
+```
+
+```{r}
+#join proteins and metadata
+FS_GOV_proteins_metadata <- left_join(FS_GOV_proteins, metadata) %>%
+  left_join(.,dates)
+```
+
+```{r}
+#this chunk creates an nmds plot sample-wise using environmental features only
+#add columns to data frame 
+summarized_FS_GOV_proteins_metadata <- FS_GOV_proteins_metadata %>%
+  filter(depth<=35) %>%
+  select(sample_name,contig,gc_cont,acidic:dataset) %>%
+  group_by(sample_name,dataset) %>%
+  summarise(across(gc_cont:o2, ~ mean(.x, na.rm = TRUE))) %>%
+  mutate(temp_group = cut(temp, breaks = c(-Inf, 0, 5, 10, 15, 20, 25, Inf), labels = c("<0", "0 - 5", "6 - 10", "11 - 15", "16 - 20", "21 - 25", ">25"))) 
+
+# Function to convert degrees to radians
+deg2rad <- function(deg) {
+  return(deg * pi / 180)
+}
+
+# Function to calculate distance to the equator
+distance_to_equator_simple <- function(latitude) {
+  # Radius of the Earth in kilometers
+  R <- 6371
+  
+  # Convert latitude to radians
+  lat_rad <- deg2rad(latitude)
+  
+  # Calculate the distance
+  distance <- R * abs(lat_rad)
+  return(distance)
+}
+
+summarized_FS_GOV_proteins_metadata <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  mutate(dist_to_equator = distance_to_equator_simple(lat)/1000) %>%
+  select(-lat,-long)
+  
+summarized_FS_GOV_proteins_metadata_short <- summarized_FS_GOV_proteins_metadata %>%
+    select(-acidic,-polar_uncharged,-polar_charged,-aromaticity,-proline,-glycine,-serine,-cysteine,-R_to_K,-Mw,-aliphatic_index,-pI,-nitrogen_usage,-gc_cont) 
+
+#NMDS --> check stress value afterwards: <0.05=excellent,<0.1=great, <0.2= good/ok, <0.3= poor, >0.3=bad  
+nmds <- summarized_FS_GOV_proteins_metadata_short %>%
+  ungroup() %>%
+  select(-sample_name,-temp_group,-dataset) %>%
+  as.matrix() %>%
+  metaMDS(distance = "bray", na.rm=T)
+
+#extract NMDS scores (x and y coordinates)
+nmds_scores = as.data.frame(scores(nmds))
+
+nmds_scores <- nmds_scores %>%
+  mutate(sample_name = summarized_FS_GOV_proteins_metadata_short$sample_name,
+         dataset = summarized_FS_GOV_proteins_metadata_short$dataset,
+         temp_group = summarized_FS_GOV_proteins_metadata_short$temp_group)#,
+         #depth_group = summarized_FS_GOV_proteins_metadata$depth_group)
+
+#run the envfit to get data for plotting of arrows
+en = envfit(nmds, summarized_FS_GOV_proteins_metadata_short, permutations = 999, na.rm = TRUE)
+en_coord_cont = as.data.frame(scores(en, "vectors")) * ordiArrowMul(en)
+
+#plot(nmds)
+nmds_plot = ggplot(nmds_scores, aes(x = NMDS1, y = NMDS2)) + 
+    geom_point(size = 4, aes(shape = dataset, colour = temp_group))+ 
+    theme(axis.text.y = element_text(colour = "black", size = 12, face = "bold"), 
+    axis.text.x = element_text(colour = "black", face = "bold", size = 12), 
+    legend.text = element_text(size = 12, face ="bold", colour ="black"), 
+    legend.position = "right", axis.title.y = element_text(face = "bold", size = 14), 
+    axis.title.x = element_text(face = "bold", size = 14, colour = "black"), 
+    legend.title = element_text(size = 14, colour = "black", face = "bold"), 
+    panel.background = element_blank(), panel.border = element_rect(colour = "black", fill = NA, linewidth = 1.2),
+    legend.key=element_blank()) + 
+    labs(x = "NMDS1", y = "NMDS2") +
+    geom_segment(aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
+
+#the next four lines create the arrows
+    data = en_coord_cont, size =1, alpha = 0.5, colour = "grey30") +
+    geom_text(data = en_coord_cont, aes(x = NMDS1, y = NMDS2), colour = "grey30",
+    fontface = "bold", label = row.names(en_coord_cont), hjust = 0.2) +
+    scale_colour_manual(values = my_colors, name = "Temperature [°C]") +
+    scale_shape_manual(values = c(4,19), name = "Dataset")
+
+nmds_plot
+```
+
+```{r}
+ggsave(plot=nmds_plot, file="/path/to/your/file/nmds_plot_env_parameters_only_maxdepth35.pdf", width = 13, height = 10)
+```
+
+```{r}
+#this chunk runs statistics
+#prepare data first
+#all protein parameters data frame
+dist.prot_param <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(gc_cont:nitrogen_usage) %>%
+  vegdist(method = "bray")
+
+#protein parameters seperately
+dist.acidic <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(acidic) %>%
+  vegdist(method = "bray")
+
+dist.polar_uncharged <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(polar_uncharged) %>%
+  vegdist(method = "bray")
+
+dist.polar_charged <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(polar_charged) %>%
+  vegdist(method = "bray")
+
+dist.aromaticity <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(aromaticity) %>%
+  vegdist(method = "bray")
+
+dist.proline <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(proline) %>%
+  vegdist(method = "bray")
+
+dist.glycine <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(glycine) %>%
+  vegdist(method = "bray")
+
+dist.serine <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(serine) %>%
+  vegdist(method = "bray")
+
+dist.R_to_K <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(R_to_K) %>%
+  vegdist(method = "bray")
+
+dist.aliphatic_index <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(aliphatic_index) %>%
+  vegdist(method = "bray")
+
+dist.pI <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(pI) %>%
+  vegdist(method = "bray")
+
+dist.nitrogen_usage <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(nitrogen_usage) %>%
+  vegdist(method = "bray")
+
+dist.gc_cont <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(gc_cont) %>%
+  vegdist(method = "bray")
+
+dist.cysteine <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(cysteine) %>%
+  vegdist(method = "bray")
+
+#environmental vectors
+dist.temp <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(temp) %>%
+  dist(method = "euclidean")
+
+dist.depth <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(depth) %>%
+  dist(method = "euclidean")
+
+dist.salinity <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(salinity) %>%
+  dist(method = "euclidean")
+
+dist.chl <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(chl) %>%
+  dist(method = "euclidean")
+
+dist.o2 <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(o2) %>%
+  dist(method = "euclidean")
+
+#latitude converted to distance to equator above
+dist.geo <- summarized_FS_GOV_proteins_metadata %>%
+  ungroup() %>%
+  select(dist_to_equator) %>%
+  dist(method = "euclidean")
+
+#the actual Mantel test --> high statistic R value & low significance p value indicate strong relationship of the tested parameters
+ 
+mantel_results <- list(
+  prot_param_temp = mantel(dist.prot_param, dist.temp, method = "spearman", permutations = 9999, na.rm = TRUE),
+  prot_param_depth = mantel(dist.prot_param, dist.depth, method = "spearman", permutations = 9999, na.rm = TRUE),
+  prot_param_salinity = mantel(dist.prot_param, dist.salinity, method = "spearman", permutations = 9999, na.rm = TRUE),
+  prot_param_chl = mantel(dist.prot_param, dist.chl, method = "spearman", permutations = 9999, na.rm = TRUE),
+  prot_param_o2 = mantel(dist.prot_param, dist.o2, method = "spearman", permutations = 9999, na.rm = TRUE),
+  prot_param_geo = mantel(dist.prot_param, dist.geo, method = "spearman", permutations = 9999, na.rm = TRUE),
+  acidic_depth = mantel(dist.acidic, dist.depth, method = "spearman", permutations = 9999, na.rm = TRUE),
+  acidic_temp = mantel(dist.acidic, dist.temp, method = "spearman", permutations = 9999, na.rm = TRUE),
+  acidic_salinity = mantel(dist.acidic, dist.salinity, method = "spearman", permutations = 9999, na.rm = TRUE),
+  acidic_chl = mantel(dist.acidic, dist.chl, method = "spearman", permutations = 9999, na.rm = TRUE),
+  acidic_o2 = mantel(dist.acidic, dist.o2, method = "spearman", permutations = 9999, na.rm = TRUE),
+  acidic_geo = mantel(dist.acidic, dist.geo, method = "spearman", permutations = 9999, na.rm = TRUE),
+  polar_uncharged_depth = mantel(dist.polar_uncharged, dist.depth, method = "spearman", permutations = 9999, na.rm = TRUE),
+  polar_uncharged_temp = mantel(dist.polar_uncharged, dist.temp, method = "spearman", permutations = 9999, na.rm = TRUE),
+  polar_uncharged_salinity = mantel(dist.polar_uncharged, dist.salinity, method = "spearman", permutations = 9999, na.rm = TRUE),
+  polar_uncharged_chl = mantel(dist.polar_uncharged, dist.chl, method = "spearman", permutations = 9999, na.rm = TRUE),
+  polar_uncharged_o2 = mantel(dist.polar_uncharged, dist.o2, method = "spearman", permutations = 9999, na.rm = TRUE),
+  polar_uncharged_geo = mantel(dist.polar_uncharged, dist.geo, method = "spearman", permutations = 9999, na.rm = TRUE),
+  polar_charged_depth = mantel(dist.polar_charged, dist.depth, method = "spearman", permutations = 9999, na.rm = TRUE),
+  polar_charged_temp = mantel(dist.polar_charged, dist.temp, method = "spearman", permutations = 9999, na.rm = TRUE),
+  polar_charged_salinity = mantel(dist.polar_charged, dist.salinity, method = "spearman", permutations = 9999, na.rm = TRUE),
+  polar_charged_chl = mantel(dist.polar_charged, dist.chl, method = "spearman", permutations = 9999, na.rm = TRUE),
+  polar_charged_o2 = mantel(dist.polar_charged, dist.o2, method = "spearman", permutations = 9999, na.rm = TRUE),
+  polar_charged_geo = mantel(dist.polar_charged, dist.geo, method = "spearman", permutations = 9999, na.rm = TRUE),
+  aromaticity_depth = mantel(dist.aromaticity, dist.depth, method = "spearman", permutations = 9999, na.rm = TRUE),
+  aromaticity_temp = mantel(dist.aromaticity, dist.temp, method = "spearman", permutations = 9999, na.rm = TRUE),
+  aromaticity_salinity = mantel(dist.aromaticity, dist.salinity, method = "spearman", permutations = 9999, na.rm = TRUE),
+  aromaticity_chl = mantel(dist.aromaticity, dist.chl, method = "spearman", permutations = 9999, na.rm = TRUE),
+  aromaticity_o2 = mantel(dist.aromaticity, dist.o2, method = "spearman", permutations = 9999, na.rm = TRUE),
+  aromaticity_geo = mantel(dist.aromaticity, dist.geo, method = "spearman", permutations = 9999, na.rm = TRUE),
+  proline_depth = mantel(dist.proline, dist.depth, method = "spearman", permutations = 9999, na.rm = TRUE),
+  proline_temp = mantel(dist.proline, dist.temp, method = "spearman", permutations = 9999, na.rm = TRUE),
+  proline_salinity = mantel(dist.proline, dist.salinity, method = "spearman", permutations = 9999, na.rm = TRUE),
+  proline_chl = mantel(dist.proline, dist.chl, method = "spearman", permutations = 9999, na.rm = TRUE),
+  proline_o2 = mantel(dist.proline, dist.o2, method = "spearman", permutations = 9999, na.rm = TRUE),
+  proline_geo = mantel(dist.proline, dist.geo, method = "spearman", permutations = 9999, na.rm = TRUE),
+  glycine_depth = mantel(dist.glycine, dist.depth, method = "spearman", permutations = 9999, na.rm = TRUE),
+  glycine_temp = mantel(dist.glycine, dist.temp, method = "spearman", permutations = 9999, na.rm = TRUE),
+  glycine_salinity = mantel(dist.glycine, dist.salinity, method = "spearman", permutations = 9999, na.rm = TRUE),
+  glycine_chl = mantel(dist.glycine, dist.chl, method = "spearman", permutations = 9999, na.rm = TRUE),
+  glycine_o2 = mantel(dist.glycine, dist.o2, method = "spearman", permutations = 9999, na.rm = TRUE),
+  glycine_geo = mantel(dist.glycine, dist.geo, method = "spearman", permutations = 9999, na.rm = TRUE),
+  serine_depth = mantel(dist.serine, dist.depth, method = "spearman", permutations = 9999, na.rm = TRUE),
+  serine_temp = mantel(dist.serine, dist.temp, method = "spearman", permutations = 9999, na.rm = TRUE),
+  serine_salinity = mantel(dist.serine, dist.salinity, method = "spearman", permutations = 9999, na.rm = TRUE),
+  serine_chl = mantel(dist.serine, dist.chl, method = "spearman", permutations = 9999, na.rm = TRUE),
+  serine_o2 = mantel(dist.serine, dist.o2, method = "spearman", permutations = 9999, na.rm = TRUE),
+  serine_geo = mantel(dist.serine, dist.geo, method = "spearman", permutations = 9999, na.rm = TRUE),
+  R_to_K_depth = mantel(dist.R_to_K, dist.depth, method = "spearman", permutations = 9999, na.rm = TRUE),
+  R_to_K_temp = mantel(dist.R_to_K, dist.temp, method = "spearman", permutations = 9999, na.rm = TRUE),
+  R_to_K_salinity = mantel(dist.R_to_K, dist.salinity, method = "spearman", permutations = 9999, na.rm = TRUE),
+  R_to_K_chl = mantel(dist.R_to_K, dist.chl, method = "spearman", permutations = 9999, na.rm = TRUE),
+  R_to_K_o2 = mantel(dist.R_to_K, dist.o2, method = "spearman", permutations = 9999, na.rm = TRUE),
+  R_to_K_geo = mantel(dist.R_to_K, dist.geo, method = "spearman", permutations = 9999, na.rm = TRUE),
+  aliphatic_index_depth = mantel(dist.aliphatic_index, dist.depth, method = "spearman", permutations = 9999, na.rm = TRUE),
+  aliphatic_index_temp = mantel(dist.aliphatic_index, dist.temp, method = "spearman", permutations = 9999, na.rm = TRUE),
+  aliphatic_index_salinity = mantel(dist.aliphatic_index, dist.salinity, method = "spearman", permutations = 9999, na.rm = TRUE),
+  aliphatic_index_chl = mantel(dist.aliphatic_index, dist.chl, method = "spearman", permutations = 9999, na.rm = TRUE),
+  aliphatic_index_o2 = mantel(dist.aliphatic_index, dist.o2, method = "spearman", permutations = 9999, na.rm = TRUE),
+  aliphatic_index_geo = mantel(dist.aliphatic_index, dist.geo, method = "spearman", permutations = 9999, na.rm = TRUE),
+  pI_depth = mantel(dist.pI, dist.depth, method = "spearman", permutations = 9999, na.rm = TRUE),
+  pI_temp = mantel(dist.pI, dist.temp, method = "spearman", permutations = 9999, na.rm = TRUE),
+  pI_salinity = mantel(dist.pI, dist.salinity, method = "spearman", permutations = 9999, na.rm = TRUE),
+  pI_chl = mantel(dist.pI, dist.chl, method = "spearman", permutations = 9999, na.rm = TRUE),
+  pI_o2 = mantel(dist.pI, dist.o2, method = "spearman", permutations = 9999, na.rm = TRUE),
+  pI_geo = mantel(dist.pI, dist.geo, method = "spearman", permutations = 9999, na.rm = TRUE),
+  nitrogen_usage_depth = mantel(dist.nitrogen_usage, dist.depth, method = "spearman", permutations = 9999, na.rm = TRUE),
+  nitrogen_usage_temp = mantel(dist.nitrogen_usage, dist.temp, method = "spearman", permutations = 9999, na.rm = TRUE),
+  nitrogen_usage_salinity = mantel(dist.nitrogen_usage, dist.salinity, method = "spearman", permutations = 9999, na.rm = TRUE),
+  nitrogen_usage_chl = mantel(dist.nitrogen_usage, dist.chl, method = "spearman", permutations = 9999, na.rm = TRUE),
+  nitrogen_usage_o2 = mantel(dist.nitrogen_usage, dist.o2, method = "spearman", permutations = 9999, na.rm = TRUE),
+  nitrogen_usage_geo = mantel(dist.nitrogen_usage, dist.geo, method = "spearman", permutations = 9999, na.rm = TRUE),
+  gc_cont_depth = mantel(dist.gc_cont, dist.depth, method = "spearman", permutations = 9999, na.rm = TRUE),
+  gc_cont_temp = mantel(dist.gc_cont, dist.temp, method = "spearman", permutations = 9999, na.rm = TRUE),
+  gc_cont_salinity = mantel(dist.gc_cont, dist.salinity, method = "spearman", permutations = 9999, na.rm = TRUE),
+  gc_cont_chl = mantel(dist.gc_cont, dist.chl, method = "spearman", permutations = 9999, na.rm = TRUE),
+  gc_cont_o2 = mantel(dist.gc_cont, dist.o2, method = "spearman", permutations = 9999, na.rm = TRUE),
+  gc_cont_geo = mantel(dist.gc_cont, dist.geo, method = "spearman", permutations = 9999, na.rm = TRUE),
+  cysteine_depth = mantel(dist.cysteine, dist.depth, method = "spearman", permutations = 9999, na.rm = TRUE),
+  cysteine_temp = mantel(dist.cysteine, dist.temp, method = "spearman", permutations = 9999, na.rm = TRUE),
+  cysteine_salinity = mantel(dist.cysteine, dist.salinity, method = "spearman", permutations = 9999, na.rm = TRUE),
+  cysteine_chl = mantel(dist.cysteine, dist.chl, method = "spearman", permutations = 9999, na.rm = TRUE),
+  cysteine_o2 = mantel(dist.cysteine, dist.o2, method = "spearman", permutations = 9999, na.rm = TRUE),
+  cysteine_geo = mantel(dist.cysteine, dist.geo, method = "spearman", permutations = 9999, na.rm = TRUE)
+)
+# Initialize vectors to store extracted values
+mantel_statistics <- numeric(length(mantel_results))
+p_values <- numeric(length(mantel_results))
+
+# Extract Mantel's r and p-values
+for (i in 1:length(mantel_results)) {
+  mantel_statistics[i] <- mantel_results[[i]]$statistic
+  p_values[i] <- mantel_results[[i]]$signif
+}
+
+# Create a dataframe
+mantel_summary <- data.frame(
+  Test = names(mantel_results),
+  Mantel_Statistic = mantel_statistics,
+  P_Value = p_values
+)
+
+split_at_last_delim <- function(string, delimiter) {
+  # Locate the position of the last delimiter
+  pos <- str_locate_all(string, delimiter)[[1]]
+  last_pos <- tail(pos, 1)[1]
+  
+  # Split the string
+  first_part <- str_sub(string, 1, last_pos - 1)
+  second_part <- str_sub(string, last_pos + 1)
+  
+  return(c(first_part, second_part))
+}
+
+# Apply the function to the dataframe
+df_split <- data.frame(t(sapply(mantel_summary$Test, split_at_last_delim, delimiter = "_")))
+colnames(df_split) <- c("Prot_param", "Env_param")
+mantel_summary <- mantel_summary %>%
+  cbind(.,df_split) %>%
+  select(-Test) %>%
+  relocate(Prot_param, .before = Mantel_Statistic) %>%
+  relocate(Env_param, .before = Mantel_Statistic)
+rownames(mantel_summary) <- NULL
+```
+
+```{r}
+write.csv(mantel_summary, file = "/path/to/your/file/correlation_analysis_maxdepth35.csv", row.names = F)
+```
+
+```{r}
+#plot heatmap of correlation analysis
+heatmap_plot <- mantel_summary %>%
+  mutate(asterisk = case_when(P_Value < 0.05 & P_Value >= 0.005 ~ "*",
+                              P_Value < 0.005 & P_Value >= 0.0005 ~ "**",
+                              P_Value < 0.0005 ~ "***",
+                              P_Value >= 0.05 ~ "")) %>%
+  mutate(Prot_param = recode(Prot_param, "prot_param" = "All", "acidic" = "Acidic","aliphatic_index" = "Aliphatic Index","aromaticity" = "Aromaticity", "cysteine" = "Cysteine", "gc_cont" = "GC content", "glycine" = "Glycine", "nitrogen_usage" = "NUS", "polar_charged" = "Polar Charged", "polar_uncharged" = "Polar Uncharged", "proline" = "Proline", "R_to_K" = "R/K", "serine" = "Serine")) %>%
+  mutate(Env_param = recode(Env_param, "chl" = "Chlorophyll", "depth" = "Depth", "geo" = "Dist. to Equator", "o2" = "O[2]", "salinity" = "Salinity", "temp" = "Temperature")) %>%
+  ggplot(aes(x = Prot_param, y = Env_param, fill = Mantel_Statistic)) +
+  geom_tile() +
+  geom_text(aes(label = asterisk), color = "black", size = 5) +
+  scale_y_discrete(
+    labels = c(
+      "Temperature",
+      "Salinity",
+      expression(O[2]),
+      "Dist. to Equator",
+      "Depth",
+      "Chlorophyll"
+    )
+  ) +
+  labs(fill = "Spearman\ncorrelation") +
+#  scale_fill_gradientn(colors = c("blue", "white","red"), values = c(-1, 0, 1), limits = c(-1,1),breaks = seq(-1, 1, by = 1)) +
+  scale_fill_gradientn(
+  colors = c("blue", "white", "red"), 
+  values = scales::rescale(c(-1, 0, 1)),  # Rescale values to match the range of 0 to 1
+  limits = c(-1, 1),
+  breaks = seq(-1, 1, by = 1),  # Adding breaks to show the full range in the legend
+  labels = seq(-1, 1, by = 1)   # Labels corresponding to the breaks
+) +
+  theme_minimal() +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_text(size = 12),
+    plot.title = element_blank(),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.35),
+  )
+
+heatmap_plot
+```
