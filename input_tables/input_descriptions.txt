@@ -1,0 +1,7 @@
+FRAM_RAS_read_CVPG_mapped_counts.txt alpha_diversity.R,virus_raw_count;
+FRAM_ALL_months_and_moorings.txt alpha_diversity.R,virus_meta
+bacMeta_from_matthias_26apr2024_correctly_merged_dates_parameters.csv bray-curtis.R,dates;cca.R,metadata;mantel-test.R,metadata;spearman_rcorr.R,metadata
+FRAM_RAS_contig_CVPG_primary_alignments.txt cca.R,dat;spearman_rcorr.R,dat
+fram_genomad_caudo.tsv bray-curtis.R,caudo_df
+fram_genomad_mega.tsv bray-curtis.R,mega_df
+fram_genomad_others.tsv bray-curtis.R,others_df
