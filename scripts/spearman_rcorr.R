@@ -61,8 +61,8 @@ virus_transposed <- t(abundance_matrix.matched.and.ordered)
 asv_transposed <- t(asv.b)
 
 # Select relevant environmental variables from metadata.2 (adjust column names as needed)
-env_data <- metadata.2[, c("temp", "sal", "daylight", "AW_frac", "PW_frac", "MLD", "iceDist",
-                          "icePast", "O2_conc", "O2_sat", "PAR_satellite", "Richness",
+env_data <- metadata.2[, c("temp", "sal", "daylight", "AW_frac", "PW_frac", "MLD",
+                           "O2_conc", "O2_sat", "PAR_satellite", "Richness",
                           "Shannon_diversity", "Evenness", "CV_per_genome_sum")]  # replace 'other_vars' with actual names of other environmental columns
 
 major.module.sums.2_transposed <- t(major.module.sums.2)
