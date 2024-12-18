@@ -1,5 +1,5 @@
 # J. Muschiol
-# 03 September, 2024
+# 17 December, 2024
 # This script is to analyze cold adaptation in viral proteins.
 # Required unput: viral proteins tab seperated (.tsv), metadata, abundance data
 ---
@@ -17,6 +17,7 @@ library(tidyverse)
 
 # others
 library(readxl)
+library(patchwork)
 
 #protein sequence analysis
 library(Peptides) #only used to calculate pI
@@ -45,7 +46,7 @@ my_colors <- c(
 ```{r}
 #import data:
 
-GOV_proteins <- read.csv("/path/to/your/file/GOV2_proteins.tsv", header=F, sep="\t", na.strings = "None") %>%
+GOV_proteins <- read.csv("your/path/to/GOV2_proteins.tsv", header=F, sep="\t", na.strings = "None") %>%
   rename("sample_name"="V1",
          "contig"="V2",
          "full_ID" = "V3",
@@ -58,10 +59,32 @@ GOV_proteins <- read.csv("/path/to/your/file/GOV2_proteins.tsv", header=F, sep="
          "rbs_motif"="V10",
          "rbs_spacer"="V11",
          "gc_cont"="V12",
-         "sequence"="V13")
-GOV_proteins$sequence <- GOV_proteins$sequence %>% str_remove("\\*")
-GOV_proteins$full_ID <- as.character(GOV_proteins$full_ID)
-FS_proteins <- read.csv("/path/to/your/file/fram_strait_proteins.tsv", header=F, sep="\t", na.strings = "None") %>%
+         "sequence"="V13") %>%
+  mutate(ID = case_when(str_starts(contig, "NODE") ~ paste(as.character(strand), ID, sep = "_"),
+                               TRUE ~ ID),
+         strand = case_when(str_starts(contig, "NODE") ~ end,
+                               TRUE ~ strand),
+         end = case_when(str_starts(contig, "NODE") ~ start,
+                               TRUE ~ end),
+         start = case_when(str_starts(contig, "NODE") ~ as.integer(full_ID),
+                               TRUE ~ start),
+         full_ID = case_when(str_starts(contig, "NODE") ~ str_replace(contig, ".*_", ""),
+                               TRUE ~ as.character(full_ID)),
+         contig = case_when(str_starts(contig, "NODE") ~ str_replace(contig, "_[^_]*$", ""),
+                               TRUE ~ contig),
+         sequence = case_when(str_ends(sequence, "\\*") ~ str_replace(sequence, "\\*", ""),
+                              TRUE ~ sequence),
+         seq_name = paste(sample_name, contig, sep ="@")
+         ) %>%
+  relocate(seq_name, .before = sample_name)
+
+taxonomy_GOV <- read.csv("your/path/to/genomad-annotate_GOV2.0.tsv", header=T, sep="\t", na.strings = "") %>%
+  mutate(taxonomy = case_when(is.na(taxonomy) ~ "Other",  # If taxonomy is NA, replace with "Other"
+                              TRUE ~ taxonomy))           # Otherwise, keep the original value
+
+GOV_proteins <- left_join(GOV_proteins, taxonomy_GOV)
+
+FS_proteins <- read.csv("your/path/to/10k.cdhit.95.all.hifi.keep1s_clean.tsv", header=F, sep="\t", na.strings = "None") %>%
   rename("sample_name"="V1",
          "contig"="V2",
          "full_ID" = "V3",
@@ -74,20 +97,34 @@ FS_proteins <- read.csv("/path/to/your/file/fram_strait_proteins.tsv", header=F,
          "rbs_motif"="V10",
          "rbs_spacer"="V11",
          "gc_cont"="V12",
-         "sequence"="V13")
-FS_proteins$sequence <- FS_proteins$sequence %>% str_remove("\\*")
+         "sequence"="V13") %>%
+  mutate(contig = str_replace_all(contig, "\\.", "_"),
+         seq_name = paste(sample_name, contig, sep = "_"),
+         seq_name = paste(seq_name, full_ID, sep = "||"),
+         seq_name = str_replace(seq_name, "_[^_]*$", ""),
+         sequence = case_when(str_ends(sequence, "\\*") ~ str_replace(sequence, "\\*", ""),
+                              TRUE ~ sequence)
+         ) %>%
+  relocate(seq_name, .before = sample_name)
+
+taxonomy_FS <- read.csv("your/path/to/genomad-annotate_FRAM_contigs.tsv", header=T, sep="\t", na.strings = "") %>%
+  mutate(seq_name = str_replace_all(seq_name, "\\.", "_"))
+
+FS_proteins <- left_join(FS_proteins, taxonomy_FS)
+
 FS_GOV_proteins <- full_join(FS_proteins,GOV_proteins)
-metadata <- read_excel("/path/to/your/file/gov2.0.and.fram.metadata.17may2024.xlsx", col_names=T, na=c("NA","","NaN")) %>% 
+
+metadata <- read_excel("your/path/to/gov2.0.and.fram.metadata.17may2024.xlsx", col_names=T, na=c("NA","","NaN")) %>% 
   relocate(long, .after=lat) %>%
   rename("sample_name" = "stationID",
          "temp" = "temperature") %>%
   filter(!is.na(temp))
-dates <- read.csv("/path/to/your/file/metadata.date.txt", header=T, sep="\t", na.strings = "") %>%
+dates <- read.csv("your/path/to/metadata.date.txt", header=T, sep="\t", na.strings = "") %>%
   rename("sample_name" = "tara_header_pacbio_sample_ID") %>%
   select(sample_name,date)
 dates$date <- as.Date(dates$date)
 
-abundances_CVPG <- read.csv("/path/to/your/file/fram.egc.wsc.merged_df.matrix_cvpg_tidy.csv", header=T, sep=";", na.strings = "", check.names = F) %>% select(-full_ID)
+abundances_CVPG <- read.csv("your/path/to/fram.egc.wsc.merged_df.matrix_cvpg_tidy.csv", header=T, sep=";", na.strings = "", check.names = F) %>% select(-full_ID)
 ```
 
 ```{r}
@@ -117,19 +154,19 @@ FS_GOV_proteins <- FS_GOV_proteins %>%
          V = (str_count(sequence, "V")),
          W = (str_count(sequence, "W")),
          Y = (str_count(sequence, "Y"))) %>%
-  mutate(acidic = (D+E)/nchar(sequence),
 
-#the following seven lines of code calculate the frequencies of the AAs in relation to protein length 
-         polar_uncharged = (S+T+N+Q)/nchar(sequence),
-         polar_charged = (R+H+K+D+E)/nchar(sequence),
-         aromaticity = (P+Y+W)/nchar(sequence),
-         proline = P/nchar(sequence),
-         glycine = G/nchar(sequence),
-         serine = S/nchar(sequence),
-         cysteine = C/nchar(sequence),
+#the following eight lines of code calculate the frequencies of the AAs in relation to protein length 
+    mutate(acidic = (D+E)/nchar(sequence),
+           polar_uncharged = (S+T+N+Q)/nchar(sequence),
+           polar_charged = (R+H+K+D+E)/nchar(sequence),
+           aromaticity = (P+Y+W)/nchar(sequence),
+           proline = P/nchar(sequence),
+           glycine = G/nchar(sequence),
+           serine = S/nchar(sequence),
+           cysteine = C/nchar(sequence),
 
 #calculate R/K ratio
-         R_to_K = R/K,
+           R_to_K = R/K,
 
 #calculation of Mw according to "Protein Identification and Analysis Tools on the Expasy Server",
 #Gasteiger, et al.; (In) John M. Walker (ed): The Proteomics Protocols Handbook, Humana Press (2005). pp. 571-607
@@ -186,9 +223,12 @@ FS_GOV_proteins_metadata <- left_join(FS_GOV_proteins, metadata) %>%
 
 ```{r}
 #this chunk creates an nmds plot sample-wise using environmental features only
+#be aware that the summarized data here will also be used below for the statistics
 #add columns to data frame 
 summarized_FS_GOV_proteins_metadata <- FS_GOV_proteins_metadata %>%
   filter(depth<=35) %>%
+# un-comment the following line and specify taxon to filter for specific viruses (eg. Caudoviricetes)
+#  filter(taxonomy == "Caudoviricetes") %>%
   select(sample_name,contig,gc_cont,acidic:dataset) %>%
   group_by(sample_name,dataset) %>%
   summarise(across(gc_cont:o2, ~ mean(.x, na.rm = TRUE))) %>%
@@ -547,4 +587,26 @@ heatmap_plot <- mantel_summary %>%
   )
 
 heatmap_plot
+```
+
+```{r}
+combined_plot <- wrap_plots(A=nmds_plot,B=heatmap_plot, guides='keep') + 
+  plot_layout(
+  design = "
+  AAA
+  AAA
+  AAA
+  AAA
+  AAA
+  AAA
+  BBB
+  BBB
+  BBB
+  "
+)
+combined_plot
+```
+
+```{r}
+ggsave(plot=combined_plot, file="Z://Projects/Viruses_DMN/241217_correlation_analysis_maxdepth35.pdf", width = 9, height = 10)
 ```
