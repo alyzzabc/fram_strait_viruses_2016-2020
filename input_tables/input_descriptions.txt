@@ -1,4 +1,5 @@
-FRAM_RAS_read_CVPG_mapped_counts.txt alpha_diversity.R,virus_raw_count;
+table_filename script_filename
+FRAM_RAS_read_CVPG_mapped_counts.txt alpha_diversity.R,virus_raw_count
 FRAM_ALL_months_and_moorings.txt alpha_diversity.R,virus_meta
 bacMeta_from_matthias_26apr2024_correctly_merged_dates_parameters.csv bray-curtis.R,dates;cca.R,metadata;mantel-test.R,metadata;spearman_rcorr.R,metadata
 FRAM_RAS_contig_CVPG_primary_alignments.txt cca.R,dat;spearman_rcorr.R,dat
