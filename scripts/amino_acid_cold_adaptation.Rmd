@@ -159,7 +159,7 @@ FS_GOV_proteins <- FS_GOV_proteins %>%
     mutate(acidic = (D+E)/nchar(sequence),
            polar_uncharged = (S+T+N+Q)/nchar(sequence),
            polar_charged = (R+H+K+D+E)/nchar(sequence),
-           aromaticity = (P+Y+W)/nchar(sequence),
+           aromaticity = (F+Y+W)/nchar(sequence),
            proline = P/nchar(sequence),
            glycine = G/nchar(sequence),
            serine = S/nchar(sequence),
@@ -306,6 +306,216 @@ nmds_plot
 
 ```{r}
 ggsave(plot=nmds_plot, file="/path/to/your/file/nmds_plot_env_parameters_only_maxdepth35.pdf", width = 13, height = 10)
+```
+
+```{r}
+#plot data sample-wise
+
+plot_R_to_K <- FS_GOV_proteins_metadata %>%
+  filter(depth <= 35) %>%
+  select(sample_name,temp,R_to_K,dataset) %>%
+  group_by(sample_name, temp,dataset) %>%
+  filter(!is.na(R_to_K)) %>%
+  filter(!is.na(temp)) %>%
+  summarise_at(vars(R_to_K), list(R_to_K_mean=mean)) %>%
+  ggplot(aes(x=temp, y=R_to_K_mean)) + 
+  geom_smooth() +
+  geom_point(aes(color=dataset)) +
+  scale_color_manual(values = my_colors)
+plot_R_to_K
+
+plot_acidic <- FS_GOV_proteins_metadata %>%
+  filter(depth <= 35) %>%
+  select(sample_name,temp,acidic,dataset) %>%
+  group_by(sample_name, temp,dataset) %>%
+  filter(!is.na(acidic)) %>%
+  filter(!is.na(temp)) %>%
+  summarise_at(vars(acidic), list(acidic_mean=mean)) %>%
+  ggplot(aes(x=temp, y=acidic_mean)) +
+  geom_smooth() +
+  geom_point(aes(color=dataset)) +
+  scale_color_manual(values = my_colors)
+plot_acidic
+
+plot_polar_uncharged <- FS_GOV_proteins_metadata %>%
+  filter(depth <= 35) %>%
+  select(sample_name,temp,polar_uncharged,dataset) %>%
+  group_by(sample_name, temp,dataset) %>%
+  filter(!is.na(polar_uncharged)) %>%
+  filter(!is.na(temp)) %>%
+  summarise_at(vars(polar_uncharged), list(polar_uncharged_mean=mean)) %>%
+  ggplot(aes(x=temp, y=polar_uncharged_mean)) +
+  geom_smooth() +
+  geom_point(aes(color=dataset)) +
+  scale_color_manual(values = my_colors)
+plot_polar_uncharged
+
+plot_polar_charged <- FS_GOV_proteins_metadata %>%
+  filter(depth <= 35) %>%
+  select(sample_name,temp,polar_charged,dataset) %>%
+  group_by(sample_name, temp,dataset) %>%
+  filter(!is.na(polar_charged)) %>%
+  filter(!is.na(temp)) %>%
+  summarise_at(vars(polar_charged), list(polar_charged_mean=mean)) %>%
+  ggplot(aes(x=temp, y=polar_charged_mean)) +
+  geom_smooth() +
+  geom_point(aes(color=dataset)) +
+  scale_color_manual(values = my_colors)
+plot_polar_charged
+
+plot_aliphatic_index <- FS_GOV_proteins_metadata %>%
+  filter(depth <= 35) %>%
+  select(sample_name,temp,aliphatic_index,dataset) %>%
+  group_by(sample_name, temp,dataset) %>%
+  filter(!is.na(aliphatic_index)) %>%
+  filter(!is.na(temp)) %>%
+  summarise_at(vars(aliphatic_index), list(aliphatic_index_mean=mean)) %>%
+  ggplot(aes(x=temp, y=aliphatic_index_mean)) +
+  geom_smooth() +
+  geom_point(aes(color=dataset)) +
+  scale_color_manual(values = my_colors)
+plot_aliphatic_index
+
+plot_pI <- FS_GOV_proteins_metadata %>%
+  filter(depth <= 35) %>%
+  select(sample_name,temp,pI,dataset) %>%
+  group_by(sample_name, temp,dataset) %>%
+  filter(!is.na(pI)) %>%
+  filter(!is.na(temp)) %>%
+  summarise_at(vars(pI), list(pI_mean=mean)) %>%
+  ggplot(aes(x=temp, y=pI_mean)) +
+  geom_smooth() +
+  geom_point(aes(color=dataset)) +
+  scale_color_manual(values = my_colors)
+plot_pI
+
+plot_proline <- FS_GOV_proteins_metadata %>%
+  filter(depth <= 35) %>%
+  select(sample_name,temp,proline,dataset) %>%
+  group_by(sample_name, temp,dataset) %>%
+  filter(!is.na(proline)) %>%
+  filter(!is.na(temp)) %>%
+  summarise_at(vars(proline), list(proline_mean=mean)) %>%
+  ggplot(aes(x=temp, y=proline_mean)) +
+  geom_smooth() +
+  geom_point(aes(color=dataset)) +
+  scale_color_manual(values = my_colors)
+plot_proline
+
+plot_glycine <- FS_GOV_proteins_metadata %>%
+  filter(depth <= 35) %>%
+  select(sample_name,temp,glycine,dataset) %>%
+  group_by(sample_name, temp,dataset) %>%
+  filter(!is.na(glycine)) %>%
+  filter(!is.na(temp)) %>%
+  summarise_at(vars(glycine), list(glycine_mean=mean)) %>%
+  ggplot(aes(x=temp, y=glycine_mean)) +
+  geom_smooth() +
+  geom_point(aes(color=dataset)) +
+  scale_color_manual(values = my_colors)
+plot_glycine
+
+plot_serine <- FS_GOV_proteins_metadata %>%
+  filter(depth <= 35) %>%
+  select(sample_name,temp,serine,dataset) %>%
+  group_by(sample_name, temp,dataset) %>%
+  filter(!is.na(serine)) %>%
+  filter(!is.na(temp)) %>%
+  summarise_at(vars(serine), list(serine_mean=mean)) %>%
+  ggplot(aes(x=temp, y=serine_mean)) +
+  geom_smooth() +
+  geom_point(aes(color=dataset)) +
+  scale_color_manual(values = my_colors)
+plot_serine
+
+plot_aromaticity <- FS_GOV_proteins_metadata %>%
+  filter(depth <= 35) %>%
+  select(sample_name,temp,aromaticity,dataset) %>%
+  group_by(sample_name, temp,dataset) %>%
+  filter(!is.na(aromaticity)) %>%
+  filter(!is.na(temp)) %>%
+  summarise_at(vars(aromaticity), list(aromaticity_mean=mean)) %>%
+  ggplot(aes(x=temp, y=aromaticity_mean)) +
+  geom_smooth() +
+  geom_point(aes(color=dataset)) +
+  scale_color_manual(values = my_colors)
+plot_aromaticity
+
+plot_nitrogen_usage <- FS_GOV_proteins_metadata %>%
+  filter(depth <= 35) %>%
+  select(sample_name,temp,nitrogen_usage,dataset) %>%
+  group_by(sample_name, temp,dataset) %>%
+  filter(!is.na(nitrogen_usage)) %>%
+  filter(!is.na(temp)) %>%
+  summarise_at(vars(nitrogen_usage), list(nitrogen_usage_mean=mean)) %>%
+  ggplot(aes(x=temp, y=nitrogen_usage_mean)) +
+  geom_smooth() +
+  geom_point(aes(color=dataset)) +
+  scale_color_manual(values = my_colors)
+plot_nitrogen_usage
+
+plot_gc_cont <- FS_GOV_proteins_metadata %>%
+  filter(depth <= 35) %>%
+  select(sample_name,temp,gc_cont,dataset) %>%
+  group_by(sample_name, temp,dataset) %>%
+  filter(!is.na(gc_cont)) %>%
+  filter(!is.na(temp)) %>%
+  summarise_at(vars(gc_cont), list(gc_cont_mean=mean)) %>%
+  ggplot(aes(x=temp, y=gc_cont_mean)) +
+  geom_smooth() +
+  geom_point(aes(color=dataset)) +
+  scale_color_manual(values = my_colors)
+plot_gc_cont
+
+plot_cysteine <- FS_GOV_proteins_metadata %>%
+  filter(depth <= 35) %>%
+  select(sample_name,temp,cysteine,dataset) %>%
+  group_by(sample_name, temp,dataset) %>%
+  filter(!is.na(cysteine)) %>%
+  filter(!is.na(temp)) %>%
+  summarise_at(vars(cysteine), list(cysteine_mean=mean)) %>%
+  ggplot(aes(x=temp, y=cysteine_mean)) +
+  geom_smooth() +
+  geom_point(aes(color=dataset)) +
+  scale_color_manual(values = my_colors)
+plot_cysteine
+```
+
+```{r}
+theme_my <- theme_bw() +
+  theme(
+    panel.grid.major = element_line(color = "grey85", linewidth = 0.3),
+    panel.grid.minor = element_line(color = "grey92", linewidth = 0.2),
+    panel.background = element_rect(fill = "white"),
+    plot.background  = element_rect(fill = "white", color = NA)
+  )
+
+plots <- list(
+  plot_acidic, plot_aliphatic_index, plot_aromaticity,
+  plot_cysteine, plot_gc_cont, plot_glycine,
+  plot_nitrogen_usage, plot_pI, plot_polar_charged,
+  plot_polar_uncharged, plot_proline, plot_R_to_K, plot_serine
+)
+
+plots <- lapply(plots, function(p) p + theme_my)
+
+plot_acidic <- plots[[1]]
+plot_aliphatic_index <- plots[[2]]
+plot_aromaticity <- plots[[3]]
+plot_cysteine <- plots[[4]]
+plot_gc_cont <- plots[[5]]
+plot_glycine <- plots[[6]]
+plot_nitrogen_usage <- plots[[7]]
+plot_pI <- plots[[8]]
+plot_polar_charged <- plots[[9]]
+plot_polar_uncharged <- plots[[10]]
+plot_proline <- plots[[11]]
+plot_R_to_K <- plots[[12]]
+plot_serine <- plots[[13]]
+
+arranged <- ggarrange(plot_acidic,plot_aliphatic_index,plot_aromaticity,plot_cysteine,plot_gc_cont,plot_glycine,plot_nitrogen_usage,plot_pI,plot_polar_charged,plot_polar_uncharged,plot_proline,plot_R_to_K,plot_serine,ncol=2,nrow=7)
+arranged
+ggsave(plot=arranged, file="Z://Projects/Viruses_DMN/260326_plot_protein_parameters_maxdepth35.pdf", width = 8, height = 15)
 ```
 
 ```{r}
@@ -550,42 +760,53 @@ write.csv(mantel_summary, file = "/path/to/your/file/correlation_analysis_maxdep
 ```{r}
 #plot heatmap of correlation analysis
 heatmap_plot <- mantel_summary %>%
-  mutate(asterisk = case_when(P_Value < 0.05 & P_Value >= 0.005 ~ "*",
-                              P_Value < 0.005 & P_Value >= 0.0005 ~ "**",
-                              P_Value < 0.0005 ~ "***",
-                              P_Value >= 0.05 ~ "")) %>%
-  mutate(Prot_param = recode(Prot_param, "prot_param" = "All", "acidic" = "Acidic","aliphatic_index" = "Aliphatic Index","aromaticity" = "Aromaticity", "cysteine" = "Cysteine", "gc_cont" = "GC content", "glycine" = "Glycine", "nitrogen_usage" = "NUS", "polar_charged" = "Polar Charged", "polar_uncharged" = "Polar Uncharged", "proline" = "Proline", "R_to_K" = "R/K", "serine" = "Serine")) %>%
-  mutate(Env_param = recode(Env_param, "chl" = "Chlorophyll", "depth" = "Depth", "geo" = "Dist. to Equator", "o2" = "O[2]", "salinity" = "Salinity", "temp" = "Temperature")) %>%
+  mutate(
+    asterisk = case_when(
+      P_Value < 0.0005 ~ "***",
+      P_Value < 0.005  ~ "**",
+      P_Value < 0.05   ~ "*",
+      TRUE ~ ""
+    ),
+    Prot_param = recode(Prot_param,
+      "prot_param"="All","acidic"="Acidic","aliphatic_index"="Aliphatic Index",
+      "aromaticity"="Aromaticity","cysteine"="Cysteine","gc_cont"="GC content",
+      "glycine"="Glycine","nitrogen_usage"="NUS","polar_charged"="Polar Charged",
+      "polar_uncharged"="Polar Uncharged","proline"="Proline","R_to_K"="R/K",
+      "serine"="Serine", "pl"="pI"
+    ),
+    Env_param = recode(Env_param,
+      "chl"="Chlorophyll","depth"="Depth","geo"="Dist. to Equator",
+      "o2"="O2","salinity"="Salinity","temp"="Temperature"
+    ),
+    Env_param = factor(Env_param, levels = c(
+      "Temperature","Salinity","O2","Dist. to Equator","Depth","Chlorophyll"
+    ))
+  ) %>%
   ggplot(aes(x = Prot_param, y = Env_param, fill = Mantel_Statistic)) +
   geom_tile() +
   geom_text(aes(label = asterisk), color = "black", size = 5) +
-  scale_y_discrete(
-    labels = c(
-      "Temperature",
-      "Salinity",
-      expression(O[2]),
-      "Dist. to Equator",
-      "Depth",
-      "Chlorophyll"
-    )
-  ) +
+  scale_y_discrete(labels = c(
+    "Temperature"="Temperature",
+    "Salinity"="Salinity",
+    "O2"=expression(O[2]),
+    "Dist. to Equator"="Dist. to Equator",
+    "Depth"="Depth",
+    "Chlorophyll"="Chlorophyll"
+  )) +
   labs(fill = "Spearman\ncorrelation") +
-#  scale_fill_gradientn(colors = c("blue", "white","red"), values = c(-1, 0, 1), limits = c(-1,1),breaks = seq(-1, 1, by = 1)) +
   scale_fill_gradientn(
-  colors = c("blue", "white", "red"), 
-  values = scales::rescale(c(-1, 0, 1)),  # Rescale values to match the range of 0 to 1
-  limits = c(-1, 1),
-  breaks = seq(-1, 1, by = 1),  # Adding breaks to show the full range in the legend
-  labels = seq(-1, 1, by = 1)   # Labels corresponding to the breaks
-) +
+    colors = c("blue", "white", "red"),
+    values = scales::rescale(c(-1, 0, 1)),
+    limits = c(-1, 1),
+    breaks = seq(-1, 1, by = 1),
+    labels = seq(-1, 1, by = 1)
+  ) +
   theme_minimal() +
   theme(
     axis.title = element_blank(),
     axis.text = element_text(size = 12),
-    plot.title = element_blank(),
-    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.35),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.35)
   )
-
 heatmap_plot
 ```
 
